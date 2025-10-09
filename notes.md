@@ -30,3 +30,8 @@ High area (no to few claims) & low exposure -> Possibility for future claims -> 
 High area (no to few claims) & high exposure -> Little chance for future claims, likely to do no claims -> low risk
 Low area (many claims) & low exposure -> Already showing signs of claims in little time -> **high** risk
 Low area (many claims) & high exposure -> Already showed signs of many claims in long period -> *medium* risk
+
+
+Notes 2nd meeting(Taha):
+-Find probability of future claims as target variables?
+-
