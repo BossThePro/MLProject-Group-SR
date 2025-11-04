@@ -80,7 +80,7 @@ def entropy(nodeLabels: list):
     Returns
     -------
     float
-        The entropy score within the range of 0 (pure) to 1 (impure)
+        The entropy score within the range of 0 (pure) to log2(C) (impure) where C is the amount of unique classes in nodeLabels
 
     Examples
     --------
@@ -96,20 +96,60 @@ def entropy(nodeLabels: list):
     entropy = -sum(proportions * np.log2(proportions))
     return entropy
 
+def information_gain(parentNodeLabels: list, leftNodeLabels: list, rightNodeLabels: list, _impurityMeasure=entropy):
+    """
+    This computes the information gain for a given split of node labels
+    Information gain is given by the formula: entropy(parentNodeLabels) - (entropy(leftNodeLabels) * (n_leftNodeLabels / n_totalNodeLabels) + entropy(rightNodeLabels) * (n_rightNodeLabels / n_totalNodeLabels))
+
+    Parameters
+    ----------
+    leftNodeLabels: list
+        A list containing all the labels for samples in the left split node
+    rightNodeLabels: list 
+        A list containing all the labels for samples in the right split node
+    _impurityMeasure: function 
+        A parameter defining the function to use to compute information gain -> should not be touched hence the _ in front
+    Returns
+    -------
+    float
+        The information gain score ranging from 0 (bad -> split did nothing) to parent entropy (perfect -> split has perfectly split the parent node into correct classes)
+    Examples
+    --------
+    >>> testNodeLabels = ['red', 'red', 'red', 'red', 'blue', 'blue']
+    >>> testLeftNodeLabels = ['red', 'red', 'blue', 'blue']
+    >>> testRightNodeLabels = ['red', 'red']
+    >>> information_gain(testNodeLabels, testLeftNodeLabels, testRightNodeLabels)
+    0.25162...
+    """
+    # This part gets the amount of left node labels, right node labels and total labels for computation later
+    numberLeftNodeLabels = len(leftNodeLabels)
+    numberRightNodeLabels = len(rightNodeLabels) 
+    numberTotalNodeLabels = len(parentNodeLabels) 
+
+    # This part computes the information gain and returns it 
+    informationGain = _impurityMeasure(parentNodeLabels) - (_impurityMeasure(leftNodeLabels) * (numberLeftNodeLabels / numberTotalNodeLabels) + _impurityMeasure(rightNodeLabels) * (numberRightNodeLabels / numberTotalNodeLabels))
+    return informationGain
+
 def decision_tree(none):
     pass
 
 
 
-testNodeLabels = ['red', 'red', 'red', 'red', 'blue', 'blue']
-testLeftNodeLabels = ['red', 'red', 'blue', 'blue']
-testRightNodeLabels = ['red', 'red']
 if __name__ == "__main__":
+    testNodeLabels = ['red', 'red', 'red', 'red', 'blue', 'blue']
+    testLeftNodeLabels = ['red', 'red', 'blue', 'blue']
+    testRightNodeLabels = ['red', 'red']
     giniValue = gini_impurity(testNodeLabels)
     print(f"Gini value for test labels: {giniValue}")
     entropyValue = entropy(testNodeLabels)
     print(f"Entropy value for test labels: {entropyValue}")
+    entropyLeft = entropy(testLeftNodeLabels)
+    print(f"Entropy value for left node: {entropyLeft}")
+    entropyRight = entropy(testRightNodeLabels)
+    print(f"Entropy value for right node: {entropyRight}")
     weightedImpurity = weighted_impurity(testLeftNodeLabels, testRightNodeLabels)
     print(f"Weighted impurity value for test labels: {weightedImpurity}")
+    informationGain = information_gain(testNodeLabels, testLeftNodeLabels, testRightNodeLabels)
+    print(f"Information gain value for test labels: {informationGain}")
     
     
