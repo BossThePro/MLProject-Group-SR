@@ -34,4 +34,4 @@ Low area (many claims) & high exposure -> Already showed signs of many claims in
 
 Notes 2nd meeting(Taha):
 -Find probability of future claims as target variables?
--
+
