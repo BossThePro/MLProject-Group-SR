@@ -1,7 +1,9 @@
-import numpy as np
+# We may not need to use these since we have to implement a regressor tree and not a classification tree but now we have them :) -> could be used for ensemble methods or other models
 # This will follow the structure of the exercise session (week 8), where we define the gini impurity/entropy/information gain first and define the decision tree afterwards
 # I will also attempt to follow the NumPy docstring style found here: https://numpydoc.readthedocs.io/en/latest/format.html
 # Furthermore, I will be using camel case for variables and snake case for functions -> See: https://developer.mozilla.org/en-US/docs/Glossary/Camel_case https://developer.mozilla.org/en-US/docs/Glossary/Snake_case
+
+import numpy as np
 
 def gini_impurity(nodeLabels: list):
     """
@@ -130,11 +132,7 @@ def information_gain(parentNodeLabels: list, leftNodeLabels: list, rightNodeLabe
     informationGain = _impurityMeasure(parentNodeLabels) - (_impurityMeasure(leftNodeLabels) * (numberLeftNodeLabels / numberTotalNodeLabels) + _impurityMeasure(rightNodeLabels) * (numberRightNodeLabels / numberTotalNodeLabels))
     return informationGain
 
-def decision_tree(none):
-    pass
-
-
-
+# This was just used for testing -> feel free to remove if you want
 if __name__ == "__main__":
     testNodeLabels = ['red', 'red', 'red', 'red', 'blue', 'blue']
     testLeftNodeLabels = ['red', 'red', 'blue', 'blue']
