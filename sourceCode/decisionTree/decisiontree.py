@@ -2,11 +2,11 @@
 import numpy as np
 import pandas as pd
 class Node():
-    def __init__(self,feature,split_val,left_child,right_child):
+    def __init__(self,feature=None,split_val=None,left_child=None,right_child=None):
         self.feature = feature
         self.split_val = split_val
         self.left_child = left_child
-        self.right_region = right_child
+        self.right_child = right_child
 
 class DecesionTreeRegressor():
     
@@ -15,15 +15,14 @@ class DecesionTreeRegressor():
         self.max_leaf_samples = max_leaf_samples
         self.min_sample_split = min_sample_split
         self.max_leaf = max_leaf
+        self.root = None
 
-    def rss(self,data_points:list):
+    def rss(self,data_points):
         """ For a given list of data points in a region, 
             this function returns the residual sum of squares for that region"""
-        RSS = 0
-        region_mean = np.mean(data_points)
-        for i in range(len(data_points)):
-            RSS += (data_points[i] - region_mean)**2 #For each region our prediction is the mean of points in that R
+        RSS = np.sum((data_points - np.mean(data_points))**2) #For each region our prediction is the mean of points in that R
         return RSS
+
 
     def best_split(self,X:pd.DataFrame,Y:pd.DataFrame):
         """For given training data, all in the same region, this function
@@ -33,10 +32,10 @@ class DecesionTreeRegressor():
         n_samples,n_features = X.shape
 
         if n_samples <= 1: 
-            return [None,None]
+            return [None,None,None]
         
         best_rss = float('inf')
-
+        best = [None,None,best_rss]
         for i in range(n_features):  #loop over all features 
             feature = X.columns[i]
             splits = np.unique(X[feature]) # for each feature consider all possible splits
@@ -62,24 +61,30 @@ class DecesionTreeRegressor():
         
         return best
 
-    def build_tree(self,x,y,depth):
+    def build_tree(self,x,y,depth=0):
         #We need to recursively build a tree with some stopping conditions
-
+        
         #given our training data find the best split 
         best_feature, split, rss = self.best_split(x,y)
-
+        
         if best_feature == None:
+            return Node(split_val=np.mean(y))
+        
+        if depth >= self.max_depth:
             return Node(split_val=np.mean(y))
         
         #we need a way to save this split
         left_region = x[best_feature] < split
         right_region = x[best_feature] >= split
-
+        
         #recursion
-        l_child = self.build_tree(x[left_region],y[left_region])
-        r_child = self.build_tree(x[right_region],y[right_region])
-
+        l_child = self.build_tree(x[left_region],y[left_region],depth+1)
+        r_child = self.build_tree(x[right_region],y[right_region],depth+1)
+        
         return Node(feature=best_feature,split_val=split,left_child=l_child,right_child=r_child)
+    
+    def fit(self, X, y):
+        self.root = self.build_tree(X, y)
         
 
 if __name__ == "__main__":
