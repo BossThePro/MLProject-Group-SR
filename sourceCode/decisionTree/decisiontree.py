@@ -1,54 +1,86 @@
 # This will contain the primary decision tree definition
 import numpy as np
 import pandas as pd
-def decision_tree_regressor(none):
-    pass
+class Node():
+    def __init__(self,feature,split_val,left_child,right_child):
+        self.feature = feature
+        self.split_val = split_val
+        self.left_child = left_child
+        self.right_region = right_child
 
-def rss(data_points:list):
-    """ For a given list of data points in a region, 
-        this function returns the residual sum of squares for that region"""
-    RSS = 0
-    region_mean = np.mean(data_points)
-    for i in range(len(data_points)):
-        RSS += (data_points[i] - region_mean)**2 #For each region our prediction is the mean of points in that R
-    return RSS
-
-def best_split(X:pd.DataFrame,Y:pd.DataFrame):
-    """For given training data, all in the same region, this function
-        returns the best feature to split on as well as the best threshold, 
-        i.e one that minimizes RSS at that point"""
+class DecesionTreeRegressor():
     
-    n_samples,n_features = X.shape
-    
-    best_rss = float('inf')
+    def __init__(self,max_depth,max_leaf_samples,min_sample_split,max_leaf):
+        self.max_depth = max_depth
+        self.max_leaf_samples = max_leaf_samples
+        self.min_sample_split = min_sample_split
+        self.max_leaf = max_leaf
 
-    for i in range(n_features):  #loop over all features 
-        feature = X.columns[i]
-        splits = np.unique(X[feature]) # for each feature consider all possible splits
+    def rss(self,data_points:list):
+        """ For a given list of data points in a region, 
+            this function returns the residual sum of squares for that region"""
+        RSS = 0
+        region_mean = np.mean(data_points)
+        for i in range(len(data_points)):
+            RSS += (data_points[i] - region_mean)**2 #For each region our prediction is the mean of points in that R
+        return RSS
+
+    def best_split(self,X:pd.DataFrame,Y:pd.DataFrame):
+        """For given training data, all in the same region, this function
+            returns the best feature to split on as well as the best threshold, 
+            i.e one that minimizes RSS at that point"""
         
+        n_samples,n_features = X.shape
 
-        for j in range(len(splits)-1): #loops over all possible splits in that feature
-            split = (splits[j] + splits[j+1]) / 2
-            
-            #split the data on both X and Y 
-            left_region = X[feature] < split
-            right_region = X[feature] >= split
-            
-            left_labels = y[left_region]
-            right_labels = y[right_region]
-            
-            #calculate the RSS and add it for both regions
-            current_rss = rss(list(left_labels)) + rss(list(right_labels))
-            
-            #if we have found a RSS less than previous best then we have a new lowest RSS
-            if current_rss < best_rss:
-                best_rss = current_rss
-                best = [feature,split]
-    
-    return best
+        if n_samples <= 1: 
+            return [None,None]
+        
+        best_rss = float('inf')
 
-def build_tree(none):
-    pass
+        for i in range(n_features):  #loop over all features 
+            feature = X.columns[i]
+            splits = np.unique(X[feature]) # for each feature consider all possible splits
+            
+
+            for j in range(len(splits)-1): #loops over all possible splits in that feature
+                split = (splits[j] + splits[j+1]) / 2
+                
+                #split the data on both X and Y 
+                left_region = X[feature] < split
+                right_region = X[feature] >= split
+                
+                left_labels = Y[left_region]
+                right_labels = Y[right_region]
+                
+                #calculate the RSS and add it for both regions
+                current_rss = self.rss(list(left_labels)) + self.rss(list(right_labels))
+                
+                #if we have found a RSS less than previous best then we have a new lowest RSS
+                if current_rss < best_rss:
+                    best_rss = current_rss
+                    best = [feature,split,best_rss]
+        
+        return best
+
+    def build_tree(self,x,y,depth):
+        #We need to recursively build a tree with some stopping conditions
+
+        #given our training data find the best split 
+        best_feature, split, rss = self.best_split(x,y)
+
+        if best_feature == None:
+            return Node(split_val=np.mean(y))
+        
+        #we need a way to save this split
+        left_region = x[best_feature] < split
+        right_region = x[best_feature] >= split
+
+        #recursion
+        l_child = self.build_tree(x[left_region],y[left_region])
+        r_child = self.build_tree(x[right_region],y[right_region])
+
+        return Node(feature=best_feature,split_val=split,left_child=l_child,right_child=r_child)
+        
 
 if __name__ == "__main__":
     pass
