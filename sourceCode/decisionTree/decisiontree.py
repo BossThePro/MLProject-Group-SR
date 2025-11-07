@@ -13,9 +13,10 @@ class DecesionTreeRegressor():
     
     def __init__(self,max_depth,max_leaf_samples,min_sample_split,max_leaf):
         self.max_depth = max_depth
-        self.max_leaf_samples = max_leaf_samples
+        self.max_leaf_samples = max_leaf_samples #not implemented yet
         self.min_sample_split = min_sample_split
         self.max_leaf = max_leaf
+        self.n_leaf = 0
         self.root = None
 
     def rss(self,data_points):
@@ -25,32 +26,32 @@ class DecesionTreeRegressor():
         return RSS
 
 
-    def best_split(self,X:pd.DataFrame,Y:pd.DataFrame):
+    def best_split(self,x:pd.DataFrame,y:pd.DataFrame):
         """For given training data, all in the same region, this function
             returns the best feature to split on as well as the best threshold, 
             i.e one that minimizes RSS at that point"""
         
-        n_samples,n_features = X.shape
+        n_samples,n_features = x.shape
 
-        if n_samples <= 1: 
+        if n_samples <= self.min_sample_split: 
             return [None,None,None]
         
         best_rss = float('inf')
         best = [None,None,best_rss]
         for i in range(n_features):  #loop over all features 
-            feature = X.columns[i]
-            splits = np.unique(X[feature]) # for each feature consider all possible splits
+            feature = x.columns[i]
+            splits = np.unique(x[feature]) # for each feature consider all possible splits
             
 
             for j in range(len(splits)-1): #loops over all possible splits in that feature
                 split = (splits[j] + splits[j+1]) / 2
                 
                 #split the data on both X and Y 
-                left_region = X[feature] < split
-                right_region = X[feature] >= split
+                left_region = x[feature] < split
+                right_region = x[feature] >= split
                 
-                left_labels = Y[left_region]
-                right_labels = Y[right_region]
+                left_labels = y[left_region]
+                right_labels = y[right_region]
                 
                 #calculate the RSS and add it for both regions
                 current_rss = self.rss(list(left_labels)) + self.rss(list(right_labels))
@@ -63,16 +64,20 @@ class DecesionTreeRegressor():
         return best
 
     def build_tree(self,x,y,depth=0):
-        #We need to recursively build a tree with some stopping conditions
+        """ This function recursively splits the tree using the best split function above,
+            Until a stopping condition is reached, then it returns a leaf"""
+
+        if best_feature == None:
+            self.n_leaf += 1
+            return Node(value=np.mean(y))
+        
+        #stopping conditions
+        if (self.max_depth != None and depth >= self.max_depth) or (self.n_leaf >= self.max_leaf):
+            self.n_leaf += 1
+            return Node(value=np.mean(y))
         
         #given our training data find the best split 
         best_feature, split, rss = self.best_split(x,y)
-        
-        if best_feature == None:
-            return Node(value=np.mean(y))
-        
-        if depth >= self.max_depth:
-            return Node(value=np.mean(y))
         
         #we need a way to save this split
         left_region = x[best_feature] < split
@@ -84,8 +89,8 @@ class DecesionTreeRegressor():
         
         return Node(feature=best_feature,split_val=split,left_child=l_child,right_child=r_child)
     
-    def fit(self, X, y):
-        self.root = self.build_tree(X, y)
+    def fit(self, x, y):
+        self.root = self.build_tree(x, y)
     
     def traverse(self,x,node:Node):
         "Traverse the tree, to make a prediction for a given x value"
