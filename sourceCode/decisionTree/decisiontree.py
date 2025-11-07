@@ -2,11 +2,12 @@
 import numpy as np
 import pandas as pd
 class Node():
-    def __init__(self,feature=None,split_val=None,left_child=None,right_child=None):
+    def __init__(self,feature=None,split_val=None,left_child=None,right_child=None,value=None):
         self.feature = feature
         self.split_val = split_val
         self.left_child = left_child
         self.right_child = right_child
+        self.value = value
 
 class DecesionTreeRegressor():
     
@@ -68,10 +69,10 @@ class DecesionTreeRegressor():
         best_feature, split, rss = self.best_split(x,y)
         
         if best_feature == None:
-            return Node(split_val=np.mean(y))
+            return Node(value=np.mean(y))
         
         if depth >= self.max_depth:
-            return Node(split_val=np.mean(y))
+            return Node(value=np.mean(y))
         
         #we need a way to save this split
         left_region = x[best_feature] < split
@@ -85,7 +86,26 @@ class DecesionTreeRegressor():
     
     def fit(self, X, y):
         self.root = self.build_tree(X, y)
+    
+    def traverse(self,x,node:Node):
+        "Traverse the tree, to make a prediction for a given x value"
+        #if there is a leaf value on the node, then return that value as the prediction
+        if node.value != None:
+            return(node.value)
         
+        if x[node.feature] <= node.split_val:
+            return self.traverse(x,node.left_child)
+        else:
+            return self.traverse(x,node.right_child)
+        
+    def predict(self, X):
+        """Predict class labels for samples in an array X"""
+        predictions = np.array()
+        for x in X:
+            predictions.append(self.traverse(x,self.root))
+        return predictions
+        
+
 
 if __name__ == "__main__":
     pass
