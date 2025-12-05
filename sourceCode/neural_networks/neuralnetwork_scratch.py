@@ -3,6 +3,7 @@ import sklearn
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy.ma as ma
+from scipy.special import factorial as factorial
 
 def initialize_weights_normal(mean, std, shape):
     return np.random.normal(mean, std, shape)
@@ -55,6 +56,12 @@ def c_side_mpdv_derivative(y_true,y_pred,b=1,c=1):
     res = np.where(y_pred<y_true, 2*c*(1-res), res)
     return res
 
+def softplus(z, beta=1):
+    return (1/beta)*np.log(1+np.exp(beta*z))
+
+def softplus_derivative(z, beta=1):
+    return np.exp(beta*z)/(np.exp(beta*z)+1)
+
 # Regression Cost Functions
 def rss(y_true: np.array, y_pred: np.array):
     return sum(np.pow(y_true-y_pred,2))
@@ -92,18 +99,18 @@ class NN:
             y_pred: Predicted probabilities of shape (batch_size, output_dim)
         """
         # >>> Hidden layer
-        # print(self.W1.shape)
-        # print(self.b1.shape)
         self.z1 = (X @ self.W1) + self.b1 # dim: batch_size x hidden_dim
 
-        # self.a1 = elu(self.z1) # Exponential Linear Activation
-        self.a1 = relu(self.z1) # Rectified Linear Unit Activation
+        self.a1 = elu(self.z1) # Exponential Linear Activation
+        # self.a1 = relu(self.z1) # Rectified Linear Unit Activation
         
         # >>> Output layer
         self.z2 = (self.a1 @ self.W2) + self.b2
         # self.y_pred = np.array(self.z2).reshape((-1,)) # Linear Activation
-        self.y_pred = np.exp(np.array(self.z2)).reshape((-1,)) # Exponential Activation
+        # self.y_pred = np.exp(np.array(self.z2)).reshape((-1,)) # Exponential Activation
+        self.y_pred = softplus(np.array(self.z2)).reshape((-1,)) # Softplus Activation
         # self.y_pred = relu(np.array(self.z2)).reshape((-1,)) # ReLU Activation
+
         
 
         return self.y_pred
@@ -135,7 +142,9 @@ class NN:
         # > Linear Activation
         # dLdz2 = dLdyhat # because dYhatdz2 is an identity matrix, derivative of linear activation function
         # > Exponential Activation
-        dLdz2 = np.array(dLdyhat).reshape(-1,1) * np.exp(self.z2).reshape(-1,1)
+        # dLdz2 = np.array(dLdyhat).reshape(-1,1) * np.exp(self.z2).reshape(-1,1)
+        # > Softplus Activation
+        dLdz2 = np.array(dLdyhat).reshape(-1,1) * softplus_derivative(self.z2).reshape(-1,1)
         # > ReLU Activation
         # dLdz2 = np.array(dLdyhat).reshape(-1,1) * relu_derivative(self.z2).reshape(-1,1)
 
@@ -144,8 +153,8 @@ class NN:
 
         # >>> Hidden layer gradients
         dLda1 = np.array(dLdz2).reshape(-1,1) @ self.W2.T
-        # dLdz1 = dLda1 * elu_derivative(self.z1)
-        dLdz1 = dLda1 * relu_derivative(self.z1)
+        dLdz1 = dLda1 * elu_derivative(self.z1)
+        # dLdz1 = dLda1 * relu_derivative(self.z1)
 
         self.dLdW1 = (X.T @ dLdz1) / batch_size
         self.db1 = np.sum(dLdz1, axis=0) / batch_size  # Shape: (1, hidden_dim) # untouched 
@@ -199,7 +208,12 @@ class NN:
         if temp_1.shape != temp_2.shape:
             raise Exception(f"{temp_1.shape} != {temp_2.shape}")
         # try:
-        return sklearn.metrics.mean_poisson_deviance(y_true_in[0],y_pred_clipped[0], sample_weight=temp_2)
+
+        a = y_pred_clipped[0]
+        b = y_true_in[0]
+        return np.mean(a-b*np.log(a) + np.log(factorial(b)))
+
+        # return sklearn.metrics.mean_poisson_deviance(y_true_in[0],y_pred_clipped[0], sample_weight=temp_2)
         # except Exception as e:
             # print(e)
             # return 0
@@ -224,7 +238,6 @@ ratio_exposure = no_claims_exposure/positive_claims_exposure
 
 # df_positive_claims.loc[:,'Exposure'] = df_positive_claims.loc[:,'Exposure'] * ratio_exposure
 # df_training[df_training['ClaimNb']>0] = df_positive_claims.copy()
-# # df_training[df_training['ClaimNb']>0] = df_positive_claims.copy()
 # > NOTE END
 
 X = df_training.loc[:, df_training.columns != 'ClaimNb']
@@ -241,8 +254,6 @@ X_train, X_val, y_train, y_val = train_test_split(X, Y, test_size=0.1, random_st
 # > Seperate Exposure 
 exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
 exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
-
-print(exposure_train_df.describe())
 
 X_train = X_train.loc[:, X_train.columns != 'Exposure']
 X_val = X_val.loc[:, X_val.columns != 'Exposure']
