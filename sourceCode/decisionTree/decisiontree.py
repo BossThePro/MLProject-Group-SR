@@ -31,10 +31,17 @@ class DecisionTreeRegressor():
     
     def mean_poisson(self,data_points):
         mean = np.mean(data_points)
-        poisson_loss = 0
-        for i in range(len(data_points)):
-            poisson_loss += 2*(data_points[i]*math.log(data_points[i]/mean)+mean-data_points[i])
-        return poisson_loss
+
+        if mean == 0:
+            return 0
+        
+        log_term = np.zeros_like(data_points, dtype=float)
+        non_zeros = data_points > 0
+
+        log_term[non_zeros] = data_points[non_zeros] * np.log(data_points[non_zeros] / mean)
+        deviance = 2 * np.sum(log_term + mean - data_points)
+
+        return deviance
 
 
     def best_split(self,x:pd.DataFrame,y:pd.DataFrame):
@@ -43,6 +50,9 @@ class DecisionTreeRegressor():
             i.e one that minimizes RSS at that point"""
 
         n_samples,n_features = x.shape
+        
+        if n_samples <= 1:
+            return [None,None,None]
         
         X = np.array(x)
         Y = np.array(y)
