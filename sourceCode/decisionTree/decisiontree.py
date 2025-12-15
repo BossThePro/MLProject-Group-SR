@@ -13,11 +13,12 @@ class Node():
 
 class DecisionTreeRegressor():
     
-    def __init__(self,max_depth=None,max_leaf_samples=None,min_sample_split = 2,max_leaf=None,rss_loss = True):
+    def __init__(self,max_depth=None,min_sample_split = 2,max_leaf=None,rss_loss = True):
+        #Hyperparamters:
         self.max_depth = max_depth
-        self.max_leaf_samples = max_leaf_samples #not implemented yet
         self.min_sample_split = min_sample_split
         self.max_leaf = max_leaf #maximum number of leafs in the tree
+
         self.n_leaf = 0
         self.root = None
         self.rss_loss = rss_loss

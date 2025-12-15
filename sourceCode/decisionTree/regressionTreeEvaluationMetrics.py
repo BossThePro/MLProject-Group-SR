@@ -24,10 +24,6 @@ def r_squared(predictions,true_label):
     RSS = (predictions_np - true_label_np)**2
     return (TSS - RSS)/TSS
 
-
-
-
-
 #Defining relative paths
 scaled_train = r"../../data/claims_train_scaled.csv"
 unscaled_train = r"../../data/claims_train_final.csv"
