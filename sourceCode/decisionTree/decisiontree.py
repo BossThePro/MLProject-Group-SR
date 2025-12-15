@@ -1,6 +1,8 @@
 # This will contain the primary decision tree definition
 import numpy as np
 import pandas as pd
+import math
+
 class Node():
     def __init__(self,feature=None,split_val=None,left_child=None,right_child=None,value=None):
         self.feature = feature
@@ -11,13 +13,15 @@ class Node():
 
 class DecisionTreeRegressor():
     
-    def __init__(self,max_depth=None,max_leaf_samples=None,min_sample_split = 2,max_leaf=None):
+    def __init__(self,max_depth=None,min_sample_split = 2,max_leaf=None,rss_loss = True):
+        #Hyperparamters:
         self.max_depth = max_depth
-        self.max_leaf_samples = max_leaf_samples #not implemented yet
         self.min_sample_split = min_sample_split
         self.max_leaf = max_leaf #maximum number of leafs in the tree
+
         self.n_leaf = 0
         self.root = None
+        self.rss_loss = rss_loss
 
     def rss(self,data_points):
         """ For a given list of data points in a region, 
@@ -25,6 +29,20 @@ class DecisionTreeRegressor():
         mean = np.mean(data_points)
         RSS = np.sum((data_points - mean)**2) #For each region our prediction is the mean of points in that R
         return RSS
+    
+    def mean_poisson(self,data_points):
+        mean = np.mean(data_points)
+
+        if mean == 0:
+            return 0
+        
+        log_term = np.zeros_like(data_points, dtype=float)
+        non_zeros = data_points > 0
+
+        log_term[non_zeros] = data_points[non_zeros] * np.log(data_points[non_zeros] / mean)
+        deviance = 2 * np.sum(log_term + mean - data_points)
+
+        return deviance
 
 
     def best_split(self,x:pd.DataFrame,y:pd.DataFrame):
@@ -33,6 +51,9 @@ class DecisionTreeRegressor():
             i.e one that minimizes RSS at that point"""
 
         n_samples,n_features = x.shape
+        
+        if n_samples <= 1:
+            return [None,None,None]
         
         X = np.array(x)
         Y = np.array(y)
@@ -53,13 +74,16 @@ class DecisionTreeRegressor():
                 left_labels = Y[left_region]
                 right_labels = Y[right_region]
                 
-                #calculate the RSS and add it for both regions
-                current_rss = self.rss(left_labels) + self.rss(right_labels)
+                #calculate the loss and add it for both regions
+                if self.rss_loss == True:
+                    current_loss = self.rss(left_labels) + self.rss(right_labels)
+                else:
+                    current_loss = self.mean_poisson(left_labels) + self.mean_poisson(right_labels)
                 
                 #if we have found a RSS less than previous best then we have a new lowest RSS
-                if current_rss < best_rss:
-                    best_rss = current_rss
-                    best = [feature,split,best_rss]
+                if current_loss < best_rss:
+                    best_loss = current_loss
+                    best = [feature,split,best_loss]
         
         return best
 
