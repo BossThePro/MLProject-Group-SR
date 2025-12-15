@@ -368,10 +368,8 @@ for x in enumerate(notable_results):
 
 print("Max: " + str(max_y_val_pred))
 
-def try_block(claim_num):
-    if not len(y_val_pred[y_val == claim_num]) == 0:
-        print(f"Claims = {claim_num} / Avg Prediction: " + str(np.mean(y_val_pred[y_val == claim_num])))
-    else:
-        print(f"Claims = {claim_num} / No such values in validation set.")
-for i in range(6):
-    try_block(i)
+y_predicted = y_val_pred
+print("Variance: ", np.var(y_predicted))
+print("Max: ", np.max(y_predicted))
+print("Min: ", np.min(y_predicted))
+print("Mean: ", np.mean(y_predicted))
