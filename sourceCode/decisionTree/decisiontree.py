@@ -1,5 +1,5 @@
 # This will contain the primary decision tree definition
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin #only add as inheritance classes if running randomizedSearchCV
 import numpy as np
 import pandas as pd
 import math
@@ -12,7 +12,7 @@ class Node():
         self.right_child = right_child
         self.value = value
 
-class DecisionTreeRegressor(BaseEstimator,RegressorMixin):
+class DecisionTreeRegressor(): #<-add here in brackets BaseEstimator, RegressorMixin for RandomizedSearchCV
     
     def __init__(self,max_depth=None,min_samples_split = 2,max_leaf_nodes=None,rss_loss = True):
         #Hyperparamters:
@@ -28,7 +28,7 @@ class DecisionTreeRegressor(BaseEstimator,RegressorMixin):
         """ For a given list of data points in a region, 
             this function returns the residual sum of squares for that region"""
         mean = np.mean(data_points)
-        RSS = np.sum((data_points - mean)**2) #For each region our prediction is the mean of points in that R
+        RSS = np.sum((data_points - mean)**2) #For each region our prediction is the mean of points in that Region
         return RSS
     
     def mean_poisson(self,data_points):
@@ -72,7 +72,7 @@ class DecisionTreeRegressor(BaseEstimator,RegressorMixin):
         for i in range(n_features):  #loop over all features 
             splits = np.unique(X[:,i]) # for each feature consider all possible splits
 
-            #considers only percentiles rather than every single value, much faster 
+            #considers only percentiles rather than every single value, much faster used for randomizedsearchCV only 
             '''splits = np.unique(np.percentile(X[:, i], np.linspace(0, 100, 100)))'''
 
             
@@ -129,10 +129,11 @@ class DecisionTreeRegressor(BaseEstimator,RegressorMixin):
         l_child = self.build_tree(x[left_region],y[left_region],depth+1)
         r_child = self.build_tree(x[right_region],y[right_region],depth+1)
         
-        print(f"Splitting {len(x)} items on {best_feature} at {split}. RSS Improvement: {rss}")
+        #print(f"Splitting {len(x)} items on {best_feature} at {split}. RSS Improvement: {rss}") for debugging
         return Node(feature=best_feature,split_val=split,left_child=l_child,right_child=r_child)
     
     def fit(self, x, y):
+        '''Builds the tree starting at the root node as the very first node with all the data'''
         self.root = self.build_tree(x, y)
     
     def traverse(self,x,node:Node):
