@@ -1,4 +1,5 @@
 # This will contain the primary decision tree definition
+from sklearn.base import BaseEstimator, RegressorMixin #only add as inheritance classes if running randomizedSearchCV
 import numpy as np
 import pandas as pd
 import math
@@ -11,13 +12,14 @@ class Node():
         self.right_child = right_child
         self.value = value
 
-class DecisionTreeRegressor():
+class DecisionTreeRegressor(): #<-add here in brackets BaseEstimator, RegressorMixin for RandomizedSearchCV
     
-    def __init__(self,max_depth=None,max_leaf_samples=None,min_sample_split = 2,max_leaf=None,rss_loss = True):
+    def __init__(self,max_depth=None,min_samples_split = 2,max_leaf_nodes=None,rss_loss = True):
+        #Hyperparamters:
         self.max_depth = max_depth
-        self.max_leaf_samples = max_leaf_samples #not implemented yet
-        self.min_sample_split = min_sample_split
-        self.max_leaf = max_leaf #maximum number of leafs in the tree
+        self.min_samples_split = min_samples_split
+        self.max_leaf_nodes = max_leaf_nodes #maximum number of leafs in the tree
+
         self.n_leaf = 0
         self.root = None
         self.rss_loss = rss_loss
@@ -26,7 +28,7 @@ class DecisionTreeRegressor():
         """ For a given list of data points in a region, 
             this function returns the residual sum of squares for that region"""
         mean = np.mean(data_points)
-        RSS = np.sum((data_points - mean)**2) #For each region our prediction is the mean of points in that R
+        RSS = np.sum((data_points - mean)**2) #For each region our prediction is the mean of points in that Region
         return RSS
     
     def mean_poisson(self,data_points):
@@ -52,23 +54,34 @@ class DecisionTreeRegressor():
         n_samples,n_features = x.shape
         
         if n_samples <= 1:
-            return [None,None,None]
+            return [None,None,float('inf')]
         
-        X = np.array(x)
-        Y = np.array(y)
+        #converts to numpy only if input is a pd.Dataframe
+        if isinstance(x, pd.DataFrame):
+            X = x.values
+            Y = y.values
+        else:
+            X = x
+            Y = y
+
         
         best_rss = float('inf')
         best = [None,None,best_rss]
+
+
         for i in range(n_features):  #loop over all features 
-            feature = x.columns[i]
             splits = np.unique(X[:,i]) # for each feature consider all possible splits
+
+            #considers only percentiles rather than every single value, much faster used for randomizedsearchCV only 
+            '''splits = np.unique(np.percentile(X[:, i], np.linspace(0, 100, 100)))'''
+
             
             for j in range(len(splits)-1): #loops over all possible splits in that feature
                 split = (splits[j] + splits[j+1]) / 2
                 
                 #split the data on both X and Y 
                 left_region = X[:,i] < split
-                right_region = X[:,i] >= split
+                right_region = ~left_region
                 
                 left_labels = Y[left_region]
                 right_labels = Y[right_region]
@@ -81,8 +94,9 @@ class DecisionTreeRegressor():
                 
                 #if we have found a RSS less than previous best then we have a new lowest RSS
                 if current_loss < best_rss:
-                    best_loss = current_loss
-                    best = [feature,split,best_loss]
+                    best_rss = current_loss
+                    feature_name = x.columns[i] if isinstance(x, pd.DataFrame) else i
+                    best = [feature_name,split,best_rss]
         
         return best
 
@@ -92,10 +106,14 @@ class DecisionTreeRegressor():
         
         #stopping conditions
         if (self.max_depth != None and depth >= self.max_depth) or \
-            (self.max_leaf != None and self.n_leaf >= self.max_leaf):
+            (self.max_leaf_nodes != None and self.n_leaf >= self.max_leaf_nodes):
             self.n_leaf += 1
             return Node(value=np.mean(y))
         
+        if len(x) < self.min_samples_split:
+            self.n_leaf += 1
+            return Node(value=np.mean(y))
+
         #given our training data find the best split 
         best_feature, split, rss = self.best_split(x,y)
 
@@ -111,9 +129,11 @@ class DecisionTreeRegressor():
         l_child = self.build_tree(x[left_region],y[left_region],depth+1)
         r_child = self.build_tree(x[right_region],y[right_region],depth+1)
         
+        #print(f"Splitting {len(x)} items on {best_feature} at {split}. RSS Improvement: {rss}") for debugging
         return Node(feature=best_feature,split_val=split,left_child=l_child,right_child=r_child)
     
     def fit(self, x, y):
+        '''Builds the tree starting at the root node as the very first node with all the data'''
         self.root = self.build_tree(x, y)
     
     def traverse(self,x,node:Node):
