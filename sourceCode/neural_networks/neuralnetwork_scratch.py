@@ -51,9 +51,16 @@ def c_side_mpdv_derivative(y_true,y_pred,b=1,c=1):
     temp_1 = y_true.copy()
     temp_2 = y_pred.copy()
     res = temp_1/temp_2
+
+    # res = np.where(y_pred>=y_true, 2*b*(1-res), res)
+    # # res = np.where(y_true==0, 2*c*res, res)
+    # res = np.where(y_pred<y_true, 2*c*(1-res), res)
+
+    # exposure = np.array(exposure_df).reshape(-1,)
     res = np.where(y_pred>=y_true, 2*b*(1-res), res)
-    res = np.where(y_true==0, 2*c*res, res)
+    # res = np.where(y_true==0, 2*c*res, res)
     res = np.where(y_pred<y_true, 2*c*(1-res), res)
+
     return res
 
 def softplus(z, beta=1):
@@ -101,21 +108,25 @@ class NN:
         # >>> Hidden layer
         self.z1 = (X @ self.W1) + self.b1 # dim: batch_size x hidden_dim
 
-        self.a1 = elu(self.z1) # Exponential Linear Activation
-        # self.a1 = relu(self.z1) # Rectified Linear Unit Activation
+        # self.a1 = elu(self.z1) # Exponential Linear Activation
+        self.a1 = relu(self.z1) # Rectified Linear Unit Activation
         
         # >>> Output layer
         self.z2 = (self.a1 @ self.W2) + self.b2
         # self.y_pred = np.array(self.z2).reshape((-1,)) # Linear Activation
-        # self.y_pred = np.exp(np.array(self.z2)).reshape((-1,)) # Exponential Activation
-        self.y_pred = softplus(np.array(self.z2)).reshape((-1,)) # Softplus Activation
+        self.y_pred = np.exp(np.array(self.z2)).reshape((-1,)) # Exponential Activation
+
+        # exposure = np.array(exposure_df).reshape(-1,)
+        # self.y_pred = np.exp(np.array(self.z2)).reshape((-1,)) * exposure.reshape(-1,) # Exponential Activation + Exposure Weight
+
+        # self.y_pred = softplus(np.array(self.z2)).reshape((-1,)) # Softplus Activation
         # self.y_pred = relu(np.array(self.z2)).reshape((-1,)) # ReLU Activation
 
         
 
         return self.y_pred
 
-    def backward(self, X, y_true, exposure_df):
+    def backward(self, X, y_true):
         """
         Backward pass - compute gradients
         
@@ -134,17 +145,20 @@ class NN:
         y_pred_clipped = self.y_pred # when output layer activation function = exponential, y_pred never reaches 0, so already clipped, but problems with weight initialization
         temp_1 = c_side_mpdv_derivative(y_true, y_pred_clipped, b=1, c=1)
 
-        temp_2 = np.array(exposure_df).reshape(-1,)
-        if temp_1.shape != temp_2.shape:
-            raise Exception(f"{temp_1.shape} != {temp_2.shape}")
-        dLdyhat = temp_1 * temp_2
+
+        # temp_2 = np.array(exposure_df).reshape(-1,)
+        # if temp_1.shape != temp_2.shape:
+        #     raise Exception(f"{temp_1.shape} != {temp_2.shape}")
+        dLdyhat = temp_1
 
         # > Linear Activation
-        # dLdz2 = dLdyhat # because dYhatdz2 is an identity matrix, derivative of linear activation function
+        dLdz2 = dLdyhat # because dYhatdz2 is an identity matrix, derivative of linear activation function
         # > Exponential Activation
         # dLdz2 = np.array(dLdyhat).reshape(-1,1) * np.exp(self.z2).reshape(-1,1)
+        # > Exponential Activation + Exposure Offset
+        # dLdz2 = np.array(dLdyhat).reshape(-1,1) * (np.exp(self.z2).reshape(-1,1) * temp_2.reshape(-1,1))
         # > Softplus Activation
-        dLdz2 = np.array(dLdyhat).reshape(-1,1) * softplus_derivative(self.z2).reshape(-1,1)
+        # dLdz2 = np.array(dLdyhat).reshape(-1,1) * softplus_derivative(self.z2).reshape(-1,1)
         # > ReLU Activation
         # dLdz2 = np.array(dLdyhat).reshape(-1,1) * relu_derivative(self.z2).reshape(-1,1)
 
@@ -153,8 +167,8 @@ class NN:
 
         # >>> Hidden layer gradients
         dLda1 = np.array(dLdz2).reshape(-1,1) @ self.W2.T
-        dLdz1 = dLda1 * elu_derivative(self.z1)
-        # dLdz1 = dLda1 * relu_derivative(self.z1)
+        # dLdz1 = dLda1 * elu_derivative(self.z1)
+        dLdz1 = dLda1 * relu_derivative(self.z1)
 
         self.dLdW1 = (X.T @ dLdz1) / batch_size
         self.db1 = np.sum(dLdz1, axis=0) / batch_size  # Shape: (1, hidden_dim) # untouched 
@@ -166,7 +180,7 @@ class NN:
         self.W2 -= self.lr * self.dLdW2.reshape(-1,1)
         self.b2 -= self.lr * self.db2
 
-    def compute_loss(self, y_true, y_pred, exposure_df):
+    def compute_loss(self, y_true, y_pred):
         y_pred_clipped = np.array(np.clip(y_pred, 0, None, dtype=np.float64))
 
         # > Idon'tknowwhich loss function
@@ -177,13 +191,15 @@ class NN:
         # loss = sklearn.metrics.mean_poisson_deviance(y_true_in[0],y_pred_clipped)
 
         # > RSS Loss
-        temp_1 = np.power(np.array(y_pred_clipped) - np.array(y_true),2)
-        temp_2 = np.array(exposure_df).reshape(-1,)
-        if temp_1.shape != temp_2.shape:
-            raise Exception(f"{temp_1.shape} != {temp_2.shape}")
-        loss = np.mean(temp_1 * temp_2)
+        # temp_1 = np.power(np.array(y_pred_clipped) - np.array(y_true),2)
+        # temp_2 = np.array(exposure_df).reshape(-1,)
+        # if temp_1.shape != temp_2.shape:
+        #     raise Exception(f"{temp_1.shape} != {temp_2.shape}")
+        # loss = np.mean(temp_1 * temp_2)
 
-        return loss
+        # return loss
+
+        return 0
     
     def predict(self, X):
         """Make predictions"""
@@ -197,23 +213,25 @@ class NN:
         y_true_labels = np.array(y_true).reshape(-1,1)
         return np.mean(y_pred == y_true_labels)
 
-    def poisson_deviance(self, X, y_true, exposure_df):
+    def poisson_deviance(self, X, y_true):
         """Compute mean poisson deviance"""
         y_pred_in = self.predict(X).reshape(1,-1)
         y_pred_clipped = np.array(np.clip(y_pred_in, 1e-12, None, dtype=np.float64))
         y_true_in = np.array(y_true).reshape(1,-1)
 
-        temp_1 = y_true_in[0]
-        temp_2 = np.array(exposure_df).reshape(-1,)
-        if temp_1.shape != temp_2.shape:
-            raise Exception(f"{temp_1.shape} != {temp_2.shape}")
+        # temp_1 = y_true_in[0]
+        # temp_2 = np.array(exposure_df).reshape(-1,)
+        # if temp_1.shape != temp_2.shape:
+        #     raise Exception(f"{temp_1.shape} != {temp_2.shape}")
         # try:
 
         a = y_pred_clipped[0]
         b = y_true_in[0]
-        return np.mean(a-b*np.log(a) + np.log(factorial(b)))
 
-        # return sklearn.metrics.mean_poisson_deviance(y_true_in[0],y_pred_clipped[0], sample_weight=temp_2)
+        # PNLLLoss
+        # return np.mean(a-b*np.log(a) + np.log(factorial(b)))
+
+        return sklearn.metrics.mean_poisson_deviance(y_true_in[0],y_pred_clipped[0])
         # except Exception as e:
             # print(e)
             # return 0
@@ -241,7 +259,8 @@ ratio_exposure = no_claims_exposure/positive_claims_exposure
 # > NOTE END
 
 X = df_training.loc[:, df_training.columns != 'ClaimNb']
-X = pd.get_dummies(X, columns=['Region','VehGas','VehBrand','Area'], drop_first=True, dtype=float)
+X = X.loc[:, X.columns != 'Area']
+X = pd.get_dummies(X, columns=['Region','VehGas','VehBrand'], drop_first=True, dtype=float)
 
 Y = df_training.loc[:,"ClaimNb"]
 
@@ -252,18 +271,18 @@ from sklearn.preprocessing import StandardScaler
 X_train, X_val, y_train, y_val = train_test_split(X, Y, test_size=0.1, random_state=42)
 
 # > Seperate Exposure 
-exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
-exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
+# exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
+# exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
 
-X_train = X_train.loc[:, X_train.columns != 'Exposure']
-X_val = X_val.loc[:, X_val.columns != 'Exposure']
+# X_train = X_train.loc[:, X_train.columns != 'Exposure']
+# X_val = X_val.loc[:, X_val.columns != 'Exposure']
 
 # Hyperparameters
 input_dim = X_train.shape[1]
-hidden_dim = 16
+hidden_dim = 32
 output_dim = 1 
-learning_rate = 0.05
-num_epochs = 100
+learning_rate = 0.05 * 2
+num_epochs = 150 * 2
 
 # Initialize network
 model = NN(input_dim, hidden_dim, output_dim, learning_rate)
@@ -279,20 +298,20 @@ for epoch in range(num_epochs):
     y_pred_train = model.forward(X_train)
     
     # Compute loss
-    train_loss = model.compute_loss(y_train, y_pred_train, exposure_train_df)
+    train_loss = model.compute_loss(y_train, y_pred_train)
     
     # Backward pass
-    model.backward(X_train, y_train, exposure_train_df)
+    model.backward(X_train, y_train)
     
     # Update weights
     model.update_weights()
     
     # Compute validation loss and accuracy
     y_pred_val = model.forward(X_val)
-    val_loss = model.compute_loss(y_val, y_pred_val, exposure_val_df)
+    val_loss = model.compute_loss(y_val, y_pred_val)
     
-    train_acc = model.poisson_deviance(X_train, y_train, exposure_train_df) 
-    val_acc = model.poisson_deviance(X_val, y_val, exposure_val_df) 
+    train_acc = model.poisson_deviance(X_train, y_train) 
+    val_acc = model.poisson_deviance(X_val, y_val) 
     
     # Store metrics
     train_losses.append(train_loss)
@@ -303,6 +322,9 @@ for epoch in range(num_epochs):
     # Print progress every 10 epochs
     if (epoch + 1) % 10 == 0 or epoch == 0:
         print("~"*125)
+
+        y_pred_val_clipped = np.clip(y_pred_val, 1e-12, None, dtype=np.float64)
+        
         print(f"Epoch {epoch+1:3d}/{num_epochs} | "
               f"Train RSS Loss: {train_loss:.4f} | Val RSS Loss: {val_loss:.4f} | "
               f"Train MPDv: {train_acc:.4f} | Val MPDv: {val_acc:.4f} | "
@@ -312,7 +334,10 @@ for epoch in range(num_epochs):
               f"Average Bias (layer 2): {np.mean(model.b2):.4f} | "
               f"Net Gradient Change (layer 1): {np.mean(np.abs(model.dLdW1)):.4f} | "
               f"Net Gradient Change (layer 2): {np.mean(np.abs(model.dLdW2)):.4f} | "
+              f"R^2: {sklearn.metrics.r2_score(y_val, y_pred_val_clipped)} | "
+              f"D^2: {sklearn.metrics.d2_tweedie_score(y_true=np.array(y_val), y_pred=y_pred_val_clipped,power=1)} | "
               )
+        # exit()
 
 print("\nTraining Complete!")
 print(f"Final Training MPDv: {train_accuracies[-1]:.4f}")
@@ -342,34 +367,34 @@ axes[1].set_ylim([0, 2])
 axes[1].legend(fontsize=11)
 axes[1].grid(True, alpha=0.3)
 
-plt.tight_layout()
-plt.show()
-
 y_val_pred = model.predict(X_val)
-for i in range(len(y_val)):
-    if i%5000 == 0:
-        temp = str(y_val_pred[i][0])
-        print(temp + " "*(20-len(temp)) + " | " + str(np.array(y_val)[i]))
-print("Notable Results:")
-notable_results = []
-y_val = np.array(y_val).reshape(-1,1)
-max_y_val_pred = max(y_val_pred)
-for i in range(len(y_val)):
-    if y_val[i] > 1 or y_val_pred[i] > 1:
-        notable_results.append((str(y_val_pred[i][0]), str(np.array(y_val)[i])))
-notable_results = sorted(notable_results, key=lambda x:x[0])
-notable_results = sorted(notable_results, key=lambda x:x[1])
-for x in enumerate(notable_results):
-    index = x[0]
-    i = x[1]
-    if (index % (len(notable_results)/30)) == 0:
-        temp = i[0]
-        print(temp + " "*(20-len(temp)) + " | " + i[1])
 
-print("Max: " + str(max_y_val_pred))
+y_results = pd.concat([y_val.copy().reset_index(), pd.DataFrame(y_val_pred,columns=['Predicted'])], axis=1)
+y_results.to_csv("results.csv", index=False)
 
 y_predicted = y_val_pred
 print("Variance: ", np.var(y_predicted))
 print("Max: ", np.max(y_predicted))
 print("Min: ", np.min(y_predicted))
 print("Mean: ", np.mean(y_predicted))
+
+plt.tight_layout()
+plt.show()
+
+
+# df_training = pd.read_csv("data/claims_test_final.csv")
+
+
+# X_test = df_training.loc[:, df_training.columns != 'ClaimNb']
+# X_test = X_test.loc[:, X_test.columns != 'Area']
+# X_test = pd.get_dummies(X_test, columns=['Region','VehGas','VehBrand'], drop_first=True, dtype=float)
+
+# y_test = df_training.loc[:,"ClaimNb"]
+
+# y_pred_test = model.forward(X_test)
+# test_loss = model.poisson_deviance(y_test, y_pred_test)
+
+# y_results = pd.concat([y_test, pd.DataFrame(y_pred_test,columns=['Predicted'])], axis=1)
+# y_results.to_csv("results.csv", index=False)
+
+# print("Test Loss: ", test_loss)
