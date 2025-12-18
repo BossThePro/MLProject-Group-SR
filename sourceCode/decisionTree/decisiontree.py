@@ -121,6 +121,8 @@ class DecisionTreeRegressor(): #<-add here in brackets BaseEstimator, RegressorM
             self.n_leaf += 1
             return Node(value=np.mean(y))
         
+        #print(f"The best loss for this split was {rss}") -only used for debugging
+        
         #we need a way to save this split
         left_region = x[best_feature] < split
         right_region = x[best_feature] >= split
