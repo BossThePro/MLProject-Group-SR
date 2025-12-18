@@ -13,6 +13,7 @@ import os
 import time
 # from torchmetrics.functional import r2_score
 from sklearn.metrics import r2_score
+from scipy.special import factorial as factorial
 
 soft_plus = nn.Softplus()
 
@@ -84,14 +85,14 @@ from sklearn.preprocessing import StandardScaler
 X_train, X_val, y_train, y_val = train_test_split(X, Y, test_size=0.1, random_state=42)
 
 # > Seperate Exposure 
-# exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
-# exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
+exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
+exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
 
-# exposure_train = np.array(exposure_train_df, dtype="float32")
-# exposure_val = np.array(exposure_val_df, dtype="float32")
+exposure_train = np.array(exposure_train_df, dtype="float32")
+exposure_val = np.array(exposure_val_df, dtype="float32")
 
-# X_train = X_train.loc[:, X_train.columns != 'Exposure']
-# X_val = X_val.loc[:, X_val.columns != 'Exposure']
+X_train = X_train.loc[:, X_train.columns != 'Exposure']
+X_val = X_val.loc[:, X_val.columns != 'Exposure']
 # /> End Seperate Exposure
 
 X_train = np.array(X_train,dtype="float32")
@@ -104,7 +105,7 @@ y_val = np.array(y_val,dtype="float32")
 # y_val = y_val / exposure_val.reshape(-1,)
 # />> End make y frequency instead
 
-a = nn.Linear(38, 192)
+a = nn.Linear(37, 192)
 torch.nn.init.xavier_uniform_(a.weight)
 b = nn.Linear(192, 192)
 torch.nn.init.xavier_uniform_(b.weight)
@@ -115,29 +116,51 @@ torch.nn.init.xavier_uniform_(d.weight)
 
 model = nn.Sequential(
     a,
-    nn.ReLU(),
+    nn.ELU(),
     b,
-    nn.ReLU(),
+    nn.ELU(),
     c,
-    nn.ReLU(),
+    nn.ELU(),
     d
-    #Expo()
+    # Expo()
 )
 
-# a = nn.Linear(38, 32)
-# torch.nn.init.xavier_uniform_(a.weight)
-# b = nn.Linear(32, 1)
-# torch.nn.init.xavier_uniform_(b.weight)
-
-# model = nn.Sequential(
-#     a,
-#     nn.ReLU(),
-#     b
-#     #Expo()
-# )
-
 # loss_fn = nn.MSELoss()  # mean square error
-loss_fn = nn.PoissonNLLLoss(log_input=False, reduction='mean', full=True)  # poisson Negative Likelihood Loss
+# loss_fn = nn.PoissonNLLLoss(log_input=False, reduction='mean', full=True)  # poisson Negative Likelihood Loss
+from torch.autograd import Function
+
+class WeightedPoissonNLLLoss(Function):
+    @staticmethod
+    def forward(ctx, y_pred, y, exposure):    
+        ctx.save_for_backward(y_pred, y, exposure)
+        # print(y_pred)
+        # print(y)
+        # print(torch.log(y_pred))
+        # print(factorial(y))
+        # print(torch.mean(y_pred - y * torch.log(y_pred) + factorial(y)))
+        # exit()
+        # if torch.mean(y_pred * exposure - y * torch.log(y_pred * exposure) + factorial(y)) > 300:
+        #     print(y_pred)
+        #     print(y)
+        #     print(exposure)
+        #     exit()
+        # print(torch.mean(y_pred))
+        # print(torch.mean(exposure))
+        # print(torch.mean(y))
+        # print(torch.mean(y_pred * exposure - y * torch.log(y_pred * exposure)))
+        return torch.mean(y_pred * exposure - y * torch.log(y_pred * exposure))
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        y_pred, y, exposure = ctx.saved_tensors
+        # temp = torch.clamp(y_pred, min=1e-12)
+        grad_input = exposure - y/y_pred
+        # print(grad_input)
+        # exit()
+        # print(grad_input)
+        return grad_input, None, None
+
+loss_fn = WeightedPoissonNLLLoss.apply
 
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -149,9 +172,7 @@ y_val = torch.tensor(y_val, dtype=torch.float32).reshape(-1, 1)
 
 # training parameters
 n_epochs = 30  # number of epochs to run
-# batch_size = X_train.shape[0] # batch gradient descent
-batch_size = 1000  # mini-batch gradient descent
-# batch_size = 1  # stochastic gradient descent
+batch_size = 1000  # size of each batch
 batch_start = torch.arange(0, len(X_train), batch_size)
  
 # Hold the best model
@@ -161,6 +182,7 @@ history_test = []
 history_train = []
 
 # training loop
+
 for epoch in range(n_epochs):
     model.train()
     with tqdm.tqdm(batch_start, unit="batch", mininterval=0, disable=True) as bar:
@@ -170,13 +192,13 @@ for epoch in range(n_epochs):
             # take a batch
             X_batch = X_train[start:start+batch_size]
             y_batch = y_train[start:start+batch_size]
-            # exposure_batch = exposure_train[start:start+batch_size]
+            exposure_batch = exposure_train[start:start+batch_size]
             # forward pass
             y_pred = model(X_batch)
-            y_pred = torch.exp(y_pred) # * torch.tensor(exposure_batch)
+            y_pred = torch.exp(y_pred)
             # y_pred = soft_plus(y_pred)
 
-            loss = loss_fn(y_pred, y_batch)
+            loss = loss_fn(y_pred, y_batch, torch.tensor(exposure_batch, requires_grad=False))
             # backward pass
             optimizer.zero_grad()
             loss.backward()
@@ -190,14 +212,14 @@ for epoch in range(n_epochs):
         model.eval()
         y_pred = model(X_val)
         y_train_pred = model(X_train)
-        y_pred = torch.exp(y_pred) # * torch.tensor(exposure_val)
-        y_train_pred = torch.exp(y_train_pred) # * torch.tensor(exposure_train)
+        y_pred = torch.exp(y_pred) 
+        y_train_pred = torch.exp(y_train_pred) 
         # y_pred = soft_plus(y_pred)
         # y_train_pred = soft_plus(y_train_pred)
 
-        loss_train = loss_fn(y_train_pred, y_train)
+        loss_train = loss_fn(y_train_pred, y_train, torch.tensor(exposure_train, requires_grad=False))
         loss_train = float(loss_train)
-        loss_val = loss_fn(y_pred, y_val)
+        loss_val = loss_fn(y_pred, y_val, torch.tensor(exposure_val, requires_grad=False))
         loss_val = float(loss_val)
 
         r_sq = float(r2_score(y_val.numpy(), y_pred.numpy()))
@@ -222,12 +244,17 @@ model.load_state_dict(best_weights)
 print("Best Validation Loss: %.10f" % best_loss)
 
 y_predicted = model(X_val)
-y_predicted = torch.exp(y_predicted) # * torch.tensor(exposure_val)
+y_predicted = torch.exp(y_predicted)
 # y_predicted = soft_plus(y_predicted)
 print("Variance: ", torch.var(y_predicted))
 print("Max: ", torch.max(y_predicted))
 print("Min: ", torch.min(y_predicted))
 print("R^2: ", float(r2_score(y_val.numpy(), y_predicted.detach().numpy())))
+
+y_val_pred = y_predicted.detach().numpy()
+
+y_results = pd.concat([pd.DataFrame(y_val,columns=['ClaimsNb']), pd.DataFrame(y_val_pred,columns=['Predicted'])], axis=1)
+y_results.to_csv("results.csv", index=False)
 
 # print("RMSE: %.10f" % np.sqrt(best_mse))
 plt.plot(history_test, label='Testing Loss')
@@ -236,25 +263,19 @@ plt.show()
 
 plt.clf()
 
-temp_samp = np.random.randint(X_val.shape[0], size=20000)
-X_sample = X_val[temp_samp, :]
-Y_sample = y_val[temp_samp, :]
+# temp_samp = np.random.randint(X_val.shape[0], size=20000)
+# X_sample = X_val[temp_samp, :]
+# Y_sample = y_val[temp_samp, :]
 
-history_samp = []
+# history_samp = []
 
-for i in range(1,11):
-    a = i * 0.1
-    X_sample_temp = np.copy(X_sample)
-    X_sample_temp[:, 0] = i
-    y_pred_sample = model(torch.tensor(X_sample_temp, dtype=torch.float32))
-    y_pred_sample = torch.exp(y_pred_sample)
-    history_samp.append(torch.mean(y_pred_sample).detach().numpy())
+# for i in range(1,11):
+#     a = i * 0.1
+#     X_sample_temp = np.copy(X_sample)
+#     X_sample_temp[:, 0] = i
+#     y_pred_sample = model(torch.tensor(X_sample_temp, dtype=torch.float32))
+#     y_pred_sample = torch.exp(y_pred_sample)
+#     history_samp.append(torch.mean(y_pred_sample).detach().numpy())
 
-plt.plot(np.arange(1,11)*0.1, history_samp)
-plt.show()
-
-y_val_pred = model(X_val)
-y_val_pred = torch.exp(y_val_pred).detach().numpy()
-
-y_results = pd.concat([pd.DataFrame(y_val.numpy(),columns=['ClaimNb']), pd.DataFrame(y_val_pred,columns=['Predicted'])], axis=1)
-y_results.to_csv("results_c.csv", index=False)
+# plt.plot(np.arange(1,11)*0.1, history_samp)
+# plt.show()
