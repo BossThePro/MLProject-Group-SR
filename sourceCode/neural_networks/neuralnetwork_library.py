@@ -104,42 +104,43 @@ y_val = np.array(y_val,dtype="float32")
 # y_val = y_val / exposure_val.reshape(-1,)
 # />> End make y frequency instead
 
-a = nn.Linear(38, 192)
-torch.nn.init.xavier_uniform_(a.weight)
-b = nn.Linear(192, 192)
-torch.nn.init.xavier_uniform_(b.weight)
-c = nn.Linear(192, 192)
-torch.nn.init.xavier_uniform_(c.weight)
-d = nn.Linear(192, 1)
-torch.nn.init.xavier_uniform_(d.weight)
-
-model = nn.Sequential(
-    a,
-    nn.ReLU(),
-    b,
-    nn.ReLU(),
-    c,
-    nn.ReLU(),
-    d
-    #Expo()
-)
-
-# a = nn.Linear(38, 32)
+# a = nn.Linear(38, 192)
 # torch.nn.init.xavier_uniform_(a.weight)
-# b = nn.Linear(32, 1)
+# b = nn.Linear(192, 192)
 # torch.nn.init.xavier_uniform_(b.weight)
+# c = nn.Linear(192, 192)
+# torch.nn.init.xavier_uniform_(c.weight)
+# d = nn.Linear(192, 1)
+# torch.nn.init.xavier_uniform_(d.weight)
 
 # model = nn.Sequential(
 #     a,
 #     nn.ReLU(),
-#     b
+#     b,
+#     nn.ReLU(),
+#     c,
+#     nn.ReLU(),
+#     d
 #     #Expo()
 # )
+
+a = nn.Linear(38, 32)
+torch.nn.init.xavier_uniform_(a.weight)
+b = nn.Linear(32, 1)
+torch.nn.init.xavier_uniform_(b.weight)
+
+model = nn.Sequential(
+    a,
+    nn.ReLU(),
+    b
+    #Expo()
+)
 
 # loss_fn = nn.MSELoss()  # mean square error
 loss_fn = nn.PoissonNLLLoss(log_input=False, reduction='mean', full=True)  # poisson Negative Likelihood Loss
 
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+# optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.SGD(model.parameters(), lr=0.05)
 
 X_train = torch.tensor(X_train, dtype=torch.float32)
 y_train = torch.tensor(y_train, dtype=torch.float32).reshape(-1, 1)
@@ -148,9 +149,9 @@ y_val = torch.tensor(y_val, dtype=torch.float32).reshape(-1, 1)
 
 
 # training parameters
-n_epochs = 30  # number of epochs to run
-# batch_size = X_train.shape[0] # batch gradient descent
-batch_size = 1000  # mini-batch gradient descent
+n_epochs = 300  # number of epochs to run
+batch_size = X_train.shape[0] # batch gradient descent
+# batch_size = 1000  # mini-batch gradient descent
 # batch_size = 1  # stochastic gradient descent
 batch_start = torch.arange(0, len(X_train), batch_size)
  
