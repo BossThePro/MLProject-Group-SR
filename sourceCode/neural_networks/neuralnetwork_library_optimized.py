@@ -12,6 +12,7 @@ import copy
 import os
 import time
 # from torchmetrics.functional import r2_score
+import sklearn
 from sklearn.metrics import r2_score
 from scipy.special import factorial as factorial
 
@@ -82,17 +83,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 # scaler = StandardScaler()
 # X = scaler.fit_transform(X)
+
 X_train, X_val, y_train, y_val = train_test_split(X, Y, test_size=0.1, random_state=42)
 
 # > Seperate Exposure 
-exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
-exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
+# exposure_train_df = X_train.loc[:, X_train.columns == 'Exposure'] 
+# exposure_val_df = X_val.loc[:, X_val.columns == 'Exposure']
 
-exposure_train = np.array(exposure_train_df, dtype="float32")
-exposure_val = np.array(exposure_val_df, dtype="float32")
+# exposure_train = np.array(exposure_train_df, dtype="float32")
+# exposure_val = np.array(exposure_val_df, dtype="float32")
 
-X_train = X_train.loc[:, X_train.columns != 'Exposure']
-X_val = X_val.loc[:, X_val.columns != 'Exposure']
+# X_train = X_train.loc[:, X_train.columns != 'Exposure']
+# X_val = X_val.loc[:, X_val.columns != 'Exposure']
 # /> End Seperate Exposure
 
 X_train = np.array(X_train,dtype="float32")
@@ -105,13 +107,13 @@ y_val = np.array(y_val,dtype="float32")
 # y_val = y_val / exposure_val.reshape(-1,)
 # />> End make y frequency instead
 
-a = nn.Linear(37, 192)
+a = nn.Linear(38, 192)
 torch.nn.init.xavier_uniform_(a.weight)
 b = nn.Linear(192, 192)
 torch.nn.init.xavier_uniform_(b.weight)
-c = nn.Linear(192, 192)
+c = nn.Linear(192, 96)
 torch.nn.init.xavier_uniform_(c.weight)
-d = nn.Linear(192, 1)
+d = nn.Linear(96, 1)
 torch.nn.init.xavier_uniform_(d.weight)
 
 model = nn.Sequential(
@@ -160,7 +162,8 @@ class WeightedPoissonNLLLoss(Function):
         # print(grad_input)
         return grad_input, None, None
 
-loss_fn = WeightedPoissonNLLLoss.apply
+# loss_fn = WeightedPoissonNLLLoss.apply
+loss_fn = nn.PoissonNLLLoss(log_input=False, reduction='mean', full=True)  # poisson Negative Likelihood Loss
 
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -182,7 +185,6 @@ history_test = []
 history_train = []
 
 # training loop
-
 for epoch in range(n_epochs):
     model.train()
     with tqdm.tqdm(batch_start, unit="batch", mininterval=0, disable=True) as bar:
@@ -192,13 +194,15 @@ for epoch in range(n_epochs):
             # take a batch
             X_batch = X_train[start:start+batch_size]
             y_batch = y_train[start:start+batch_size]
-            exposure_batch = exposure_train[start:start+batch_size]
+            # exposure_batch = exposure_train[start:start+batch_size]
             # forward pass
             y_pred = model(X_batch)
             y_pred = torch.exp(y_pred)
             # y_pred = soft_plus(y_pred)
 
-            loss = loss_fn(y_pred, y_batch, torch.tensor(exposure_batch, requires_grad=False))
+            # loss = loss_fn(y_pred, y_batch, torch.tensor(exposure_batch, requires_grad=False))
+            loss = loss_fn(y_pred, y_batch)
+
             # backward pass
             optimizer.zero_grad()
             loss.backward()
@@ -217,9 +221,11 @@ for epoch in range(n_epochs):
         # y_pred = soft_plus(y_pred)
         # y_train_pred = soft_plus(y_train_pred)
 
-        loss_train = loss_fn(y_train_pred, y_train, torch.tensor(exposure_train, requires_grad=False))
+        # loss_train = loss_fn(y_train_pred, y_train, torch.tensor(exposure_train, requires_grad=False))
+        loss_train = loss_fn(y_train_pred, y_train)
         loss_train = float(loss_train)
-        loss_val = loss_fn(y_pred, y_val, torch.tensor(exposure_val, requires_grad=False))
+        # loss_val = loss_fn(y_pred, y_val, torch.tensor(exposure_val, requires_grad=False))
+        loss_val = loss_fn(y_pred, y_val)
         loss_val = float(loss_val)
 
         r_sq = float(r2_score(y_val.numpy(), y_pred.numpy()))
@@ -253,8 +259,8 @@ print("R^2: ", float(r2_score(y_val.numpy(), y_predicted.detach().numpy())))
 
 y_val_pred = y_predicted.detach().numpy()
 
-y_results = pd.concat([pd.DataFrame(y_val,columns=['ClaimsNb']), pd.DataFrame(y_val_pred,columns=['Predicted'])], axis=1)
-y_results.to_csv("results.csv", index=False)
+y_results = pd.concat([pd.DataFrame(y_val,columns=['ClaimNb']), pd.DataFrame(y_val_pred,columns=['Predicted'])], axis=1)
+y_results.to_csv("results_a.csv", index=False)
 
 # print("RMSE: %.10f" % np.sqrt(best_mse))
 plt.plot(history_test, label='Testing Loss')
@@ -279,3 +285,29 @@ plt.clf()
 
 # plt.plot(np.arange(1,11)*0.1, history_samp)
 # plt.show()
+
+# >>> Test Data
+df_training = pd.read_csv("data/claims_test_final.csv")
+
+X_test = df_training.loc[:, df_training.columns != 'ClaimNb']
+X_test = X_test.loc[:, X_test.columns != 'Area']
+X_test = pd.get_dummies(X_test, columns=['Region','VehGas','VehBrand'], drop_first=True, dtype=float)
+
+y_test = df_training.loc[:,"ClaimNb"]
+
+X_test_np = np.array(X_test,dtype="float32")
+y_test_np = np.array(y_test,dtype="float32")
+
+X_test = torch.tensor(X_test_np, dtype=torch.float32)
+y_test = torch.tensor(y_test_np, dtype=torch.float32).reshape(-1, 1)
+
+y_pred_test = model(X_test)
+y_pred_test = torch.exp(y_pred_test)
+y_pred_test = y_pred_test.detach().numpy()
+test_loss = sklearn.metrics.mean_poisson_deviance(y_test_np,y_pred_test)
+
+
+y_results = pd.concat([pd.DataFrame(y_test_np,columns=['ClaimNb']), pd.DataFrame(y_pred_test,columns=['Predicted'])], axis=1)
+y_results.to_csv("results_b.csv", index=False)
+
+print("Test Loss: ", test_loss)
